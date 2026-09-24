@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>D6 Kitchens</title>
+    <link>https://d6kitchens.com/</link>
+    <description>Articles, projects and announcements from D6 Kitchens.</description>
+    <language>en</language>
+    <atom:link href="https://d6kitchens.com/feed.xml" rel="self" type="application/rss+xml"/>
+
+    <!--
+      Add ONLY genuinely published articles, projects or announcements.
+      Newest first. Copy this block per entry; each needs its own live page URL.
+
+    <item>
+      <title>Title of the article / project / announcement</title>
+      <link>https://d6kitchens.com/path-to-page</link>
+      <guid isPermaLink="true">https://d6kitchens.com/path-to-page</guid>
+      <pubDate>Thu, 24 Sep 2026 09:00:00 +0400</pubDate>
+      <description>One or two sentence summary.</description>
+    </item>
+    -->
+
+  </channel>
+</rss>
