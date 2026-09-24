@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // D6 Kitchens — builds the public site into dist/:
-//   copies allowlisted public files, generates /updates/ pages and /feed.xml from _updates/*.md.
+//   copies allowlisted public files, generates /insights/ pages and /feed.xml from _insights/*.md.
 // Nothing outside PUBLIC is published (no Markdown sources, drafts, scripts or docs).
 // Zero dependencies. Usage: node scripts/build.mjs [siteRoot]
 import fs from 'node:fs';
@@ -8,9 +8,9 @@ import path from 'node:path';
 
 const ROOT = path.resolve(process.argv[2] || path.join(path.dirname(new URL(import.meta.url).pathname), '..'));
 const SITE = 'https://d6kitchens.com';
-const SRC = path.join(ROOT, '_updates');
+const SRC = path.join(ROOT, '_insights');
 const DIST = path.join(ROOT, 'dist');
-const OUT = path.join(DIST, 'updates');
+const OUT = path.join(DIST, 'insights');
 // Public files/folders copied to dist/. Add new public assets here (e.g. favicon, robots.txt).
 const PUBLIC = ['index.html', 'images', 'assets', 'favicon.ico', 'favicon.svg', 'robots.txt', '_headers', '_redirects'];
 const MEDIA_DIRS = ['images/', 'assets/'];
@@ -41,18 +41,32 @@ function inline(s) {
 }
 
 function markdown(md) {
-  const out = []; let para = []; let list = [];
+  const out = []; let para = []; let list = []; let listTag = 'ul'; let table = []; let quote = [];
   const flushP = () => { if (para.length) out.push(`<p>${inline(para.join(' '))}</p>`); para = []; };
-  const flushL = () => { if (list.length) out.push(`<ul>${list.map(i => `<li>${inline(i)}</li>`).join('')}</ul>`); list = []; };
+  const flushL = () => { if (list.length) out.push(`<${listTag}>${list.map(i => `<li>${inline(i)}</li>`).join('')}</${listTag}>`); list = []; };
+  const flushQ = () => { if (quote.length) out.push(`<blockquote><p>${inline(quote.join(' '))}</p></blockquote>`); quote = []; };
+  const cells = r => r.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+  const flushT = () => {
+    if (table.length) {
+      const [head, , ...rows] = table;
+      out.push(`<div class="table-wrap"><table><thead><tr>${cells(head).map(c => `<th>${inline(c)}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${cells(r).map(c => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`);
+    }
+    table = [];
+  };
+  const flushAll = () => { flushP(); flushL(); flushQ(); flushT(); };
   for (const line of md.split(/\r?\n/)) {
     const h = line.match(/^(#{2,3})\s+(.*)$/);
     const li = line.match(/^[-*]\s+(.*)$/);
-    if (h) { flushP(); flushL(); out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); }
-    else if (li) { flushP(); list.push(li[1]); }
-    else if (!line.trim()) { flushP(); flushL(); }
-    else { flushL(); para.push(line.trim()); }
+    const oli = line.match(/^\d+\.\s+(.*)$/);
+    const q = line.match(/^>\s?(.*)$/);
+    if (/^\s*\|.*\|\s*$/.test(line)) { flushP(); flushL(); flushQ(); table.push(line); }
+    else if (h) { flushAll(); out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); }
+    else if (li || oli) { const tag = li ? 'ul' : 'ol'; flushP(); flushQ(); flushT(); if (list.length && listTag !== tag) flushL(); listTag = tag; list.push((li || oli)[1]); }
+    else if (q) { flushP(); flushL(); flushT(); quote.push(q[1]); }
+    else if (!line.trim()) { flushAll(); }
+    else { flushL(); flushQ(); flushT(); para.push(line.trim()); }
   }
-  flushP(); flushL();
+  flushAll();
   return out.join('\n');
 }
 
@@ -92,13 +106,13 @@ if (fs.existsSync(SRC)) {
     const dayTag = d.date.slice(0, 10);
     posts.push({
       ...d, date, image,
-      url: `${SITE}/updates/${d.slug}/`,
-      guid: d.guid || `tag:d6kitchens.com,${dayTag}:updates/${d.slug}`,
+      url: `${SITE}/insights/${d.slug}/`,
+      guid: d.guid || `tag:d6kitchens.com,${dayTag}:insights/${d.slug}`,
       html: markdown(parsed.body),
     });
   }
 }
-if (errors.length) { console.error('Update build failed:\n  ' + errors.join('\n  ')); process.exit(1); }
+if (errors.length) { console.error('Insights build failed:\n  ' + errors.join('\n  ')); process.exit(1); }
 posts.sort((a, b) => b.date - a.date);
 
 // ---------- templates ----------
@@ -112,7 +126,7 @@ const page = ({ title, description, canonical, ogImage, main }) => `<!DOCTYPE ht
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(description)}">
 <link rel="canonical" href="${canonical}">
-<link rel="alternate" type="application/rss+xml" title="D6 Kitchens updates" href="/feed.xml">
+<link rel="alternate" type="application/rss+xml" title="D6 Kitchens Insights" href="/feed.xml">
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:url" content="${canonical}">
@@ -156,6 +170,15 @@ ${ogImage ? `<meta property="og:image" content="${ogImage}">\n` : ''}<link rel="
   .body{margin-top:40px;font-size:17px;line-height:1.7;}
   .body h2{font-size:28px;margin:44px 0 12px;} .body h3{font-size:21px;margin:32px 0 8px;}
   .body p,.body ul{margin:0 0 20px;} .body a{text-decoration-color:var(--turmeric);text-underline-offset:3px;}
+  .body ol{margin:0 0 20px;padding-left:22px;} .body li{margin-bottom:8px;}
+  .body blockquote{margin:32px 0;padding:4px 0 4px 24px;border-left:3px solid var(--turmeric);font-family:'Fraunces',serif;font-size:22px;line-height:1.4;}
+  .body blockquote p{margin:0;}
+  .table-wrap{overflow-x:auto;margin:8px 0 28px;border-top:2px solid var(--ink);}
+  .body table{width:100%;border-collapse:collapse;font-size:14px;line-height:1.5;min-width:620px;}
+  .body th{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;text-align:left;color:var(--steel);font-weight:500;padding:12px 14px 10px 0;border-bottom:1px solid var(--line-on-light);}
+  .body td{padding:12px 14px 12px 0;border-bottom:1px solid var(--line-on-light);vertical-align:top;}
+  .body td:first-child{font-weight:600;}
+  .body tbody tr:hover td{background:var(--paper-dim);}
   .back{display:inline-block;margin-top:56px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--steel);text-decoration:none;}
   .back:hover{color:var(--ink);}
   footer{border-top:1px solid var(--line-on-light);padding:32px 0;}
@@ -174,7 +197,7 @@ ${ogImage ? `<meta property="og:image" content="${ogImage}">\n` : ''}<link rel="
       <a href="/#sourcing">Sourcing</a>
       <a href="/#process">How It Works</a>
       <a href="/#build">Build With Us</a>
-      <a href="/updates/" aria-current="page">Updates</a>
+      <a href="/insights/" aria-current="page">Insights</a>
     </nav>
     <a href="/#contact" class="nav-cta">PARTNER WITH US</a>
   </div>
@@ -182,18 +205,18 @@ ${ogImage ? `<meta property="og:image" content="${ogImage}">\n` : ''}<link rel="
 <main><div class="wrap">
 ${main}
 </div></main>
-<footer><div class="wrap"><span>D6 Kitchens</span><span><a href="/updates/">Updates</a> &nbsp; <a href="/feed.xml">RSS</a> &nbsp; <a href="mailto:hello@d6kitchens.com">hello@d6kitchens.com</a></span></div></footer>
+<footer><div class="wrap"><span>D6 Kitchens</span><span><a href="/insights/">Insights</a> &nbsp; <a href="/feed.xml">RSS</a> &nbsp; <a href="mailto:hello@d6kitchens.com">hello@d6kitchens.com</a></span></div></footer>
 </body>
 </html>
 `;
 
 const indexMain = `<div class="intro">
-  <h1>Updates</h1>
-  <p>Announcements, new kitchen brands, launches and milestones from D6 Kitchens.</p>
+  <h1>Insights</h1>
+  <p>Perspectives on food, hospitality and kitchen operations, plus announcements and milestones from D6 Kitchens.</p>
 </div>
 ${posts.length ? `<ul class="list">
-${posts.map(p => `  <li><a href="/updates/${p.slug}/"><time datetime="${p.date.toISOString()}">${displayDate(p.date)}</time><div><h2>${esc(p.title)}</h2><p>${esc(p.description)}</p></div></a></li>`).join('\n')}
-</ul>` : `<p class="empty">No updates have been published yet. Follow the <a href="/feed.xml">RSS feed</a> to hear about the first one.</p>`}`;
+${posts.map(p => `  <li><a href="/insights/${p.slug}/"><time datetime="${p.date.toISOString()}">${displayDate(p.date)}</time><div><h2>${esc(p.title)}</h2><p>${esc(p.description)}</p></div></a></li>`).join('\n')}
+</ul>` : `<p class="empty">No insights have been published yet. Follow the <a href="/feed.xml">RSS feed</a> to hear about the first one.</p>`}`;
 
 // ---------- fresh dist/ with public files only ----------
 fs.rmSync(DIST, { recursive: true, force: true });
@@ -204,9 +227,9 @@ for (const item of PUBLIC) {
 }
 if (!fs.existsSync(path.join(DIST, 'index.html'))) { console.error('Build failed: index.html missing'); process.exit(1); }
 fs.writeFileSync(path.join(OUT, 'index.html'), page({
-  title: 'Updates — D6 Kitchens',
-  description: 'Announcements, new kitchen brands, launches and milestones from D6 Kitchens.',
-  canonical: `${SITE}/updates/`, main: indexMain,
+  title: 'Insights — D6 Kitchens',
+  description: 'Perspectives on food, hospitality and kitchen operations, plus announcements and milestones from D6 Kitchens.',
+  canonical: `${SITE}/insights/`, main: indexMain,
 }));
 for (const p of posts) {
   fs.mkdirSync(path.join(OUT, p.slug), { recursive: true });
@@ -220,7 +243,7 @@ for (const p of posts) {
   <div class="body">
 ${p.html}
   </div>
-  <a class="back" href="/updates/">All updates</a>
+  <a class="back" href="/insights/">All insights</a>
 </article>`,
   }));
 }
@@ -238,13 +261,13 @@ ${p.image?.length ? `      <enclosure url="${p.image.url}" length="${p.image.len
 const feed = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:media="http://search.yahoo.com/mrss/">
   <channel>
-    <title>D6 Kitchens — Updates</title>
-    <link>${SITE}/updates/</link>
-    <description>Announcements, new kitchen brands, launches and company milestones from D6 Kitchens.</description>
+    <title>D6 Kitchens — Insights</title>
+    <link>${SITE}/insights/</link>
+    <description>Perspectives on food, hospitality and kitchen operations, plus announcements and milestones from D6 Kitchens.</description>
     <language>en</language>
     <atom:link href="${SITE}/feed.xml" rel="self" type="application/rss+xml"/>
 ${posts.length ? `    <lastBuildDate>${posts[0].date.toUTCString()}</lastBuildDate>\n` : ''}${posts.map(item).join('\n')}${posts.length ? '\n' : ''}  </channel>
 </rss>
 `;
 fs.writeFileSync(path.join(DIST, 'feed.xml'), feed);
-console.log(`Built dist/ with ${posts.length} published update(s) → /updates/ and /feed.xml`);
+console.log(`Built dist/ with ${posts.length} published insight(s) → /insights/ and /feed.xml`);

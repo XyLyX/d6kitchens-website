@@ -9,3 +9,14 @@
   for = "/feed.xml"
   [headers.values]
     Content-Type = "application/rss+xml; charset=utf-8"
+
+# /updates/ was renamed to /insights/
+[[redirects]]
+  from = "/updates"
+  to = "/insights/"
+  status = 301
+
+[[redirects]]
+  from = "/updates/*"
+  to = "/insights/:splat"
+  status = 301
